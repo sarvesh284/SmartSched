@@ -1,0 +1,295 @@
+// src/pages/SubjectsPage.jsx
+import React, { useState, useEffect } from "react";
+import axios from "../../../axiosConfig.js"; // Import your configured axios instance
+import { motion, AnimatePresence } from "framer-motion";
+import AddEditSubjectModal from "../Subject/AddEditSubjectModal.jsx"; // Import the new modal component
+import { useAuth } from "../../../Context/authContext.jsx"; // Assuming authentication is needed for adding/editing
+import { useNavigate } from "react-router-dom"; // For redirection if not logged in
+
+const SubjectsPage = () => {
+  const [subjects, setSubjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [showModal, setShowModal] = useState(false); // State to control modal visibility
+  const [editingSubject, setEditingSubject] = useState(null); // State to hold data for editing (null for add)
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false); // State for delete confirmation
+  const [subjectToDelete, setSubjectToDelete] = useState(null); // State to hold subject to be deleted
+
+  const { user } = useAuth(); // Get user object from authentication context
+  const navigate = useNavigate(); // Hook for programmatic navigation
+
+  // Function to fetch subject data from the backend API
+  const fetchSubjects = async () => {
+    try {
+      setLoading(true);
+      setError(null); // Clear previous errors when fetching
+      const res = await axios.get("/api/subject/"); // Your endpoint
+      setSubjects(res.data); // Set the fetched data to state
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Failed to fetch subjects. Please ensure the backend is running and the API endpoint is correct."
+      );
+      console.error("Error fetching subjects:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch subjects on component mount
+  useEffect(() => {
+    fetchSubjects();
+  }, []);
+
+  // Handler for submitting the Add/Edit form from the modal
+  const handleAddEditSubmit = async (formData) => {
+    try {
+      if (editingSubject) {
+        // If editingSubject is set, it's an update (PUT) operation
+        await axios.put(`/api/subject/${editingSubject._id}`, formData);
+        console.log("Subject updated successfully!");
+      } else {
+        // If editingSubject is null, it's an add (POST) operation
+        await axios.post("/api/subject/", formData);
+        console.log("Subject added successfully!");
+      }
+      fetchSubjects(); // Re-fetch all subjects to update the list
+      closeModal(); // Close the modal on successful operation
+    } catch (err) {
+      // Set error if API call fails
+      setError(err.response?.data?.message || "Failed to save subject.");
+      console.error("Error saving subject:", err);
+      // Note: For a better UX, you might want to pass this error back to the modal
+      // so the user can see it without the modal closing.
+    }
+  };
+
+  // Handler for initiating subject deletion
+  const handleDeleteClick = (subject) => {
+    if (!user) {
+      // Check if user is NOT logged in
+      navigate("/login"); // Redirect to login page
+      return; // Stop execution
+    }
+    setSubjectToDelete(subject); // Set the subject to be deleted
+    setShowConfirmDelete(true); // Show the confirmation dialog
+  };
+
+  // Handler for confirming deletion
+  const handleConfirmDelete = async () => {
+    if (!subjectToDelete) return; // Should not happen if button is clicked after setting subjectToDelete
+
+    try {
+      await axios.delete(`/api/subject/${subjectToDelete._id}`);
+      console.log("Subject deleted successfully!");
+      fetchSubjects(); // Re-fetch all subjects to update the list
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to delete subject.");
+      console.error("Error deleting subject:", err);
+    } finally {
+      setShowConfirmDelete(false); // Hide the confirmation dialog
+      setSubjectToDelete(null); // Clear the subject to be deleted
+    }
+  };
+
+  // Opens the modal for adding a new subject, with login check
+  const openAddModal = () => {
+    if (!user) {
+      // Check if user is NOT logged in
+      navigate("/login"); // Redirect to login page
+      return; // Stop execution
+    }
+    setEditingSubject(null); // Clear any previous editing data
+    setShowModal(true); // Show the modal
+  };
+
+  // Opens the modal for editing an existing subject, with login check
+  const openEditModal = (subject) => {
+    if (!user) {
+      // Check if user is NOT logged in
+      navigate("/login"); // Redirect to login page
+      return; // Stop execution
+    }
+    setEditingSubject(subject); // Set the subject data to be edited
+    setShowModal(true);
+  };
+
+  // Closes the modal and resets editing state
+  const closeModal = () => {
+    setShowModal(false);
+    setEditingSubject(null);
+    setError(null); // Clear any main page errors related to modal submission
+  };
+
+  // Framer Motion variants for animations
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1, // Stagger animation for children cards
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { y: 20, opacity: 0 },
+    visible: { y: 0, opacity: 1 },
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-4xl mx-auto">
+        <motion.h1
+          className="text-4xl font-extrabold text-gray-900 text-center mb-10"
+          initial={{ y: -50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5 }}
+        >
+          Manage Subjects
+        </motion.h1>
+
+        {/* Add New Subject Button */}
+        <div className="flex justify-end mb-6">
+          <motion.button
+            onClick={openAddModal}
+            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-xl shadow-md transition duration-300 transform hover:scale-105"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            Add New Subject
+          </motion.button>
+        </div>
+
+        {/* Loading Indicator */}
+        {loading && (
+          <div className="flex justify-center items-center h-40">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-500"></div>
+            <p className="ml-4 text-gray-600">Loading subjects...</p>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div
+            className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative text-center"
+            role="alert"
+          >
+            <strong className="font-bold">Error: </strong>
+            <span className="block sm:inline">{error}</span>
+          </div>
+        )}
+
+        {/* No Subjects Found Message */}
+        {!loading && !error && subjects.length === 0 && (
+          <p className="text-center text-gray-600 text-lg">
+            No subjects found.
+          </p>
+        )}
+
+        {/* Subjects Grid */}
+        {!loading && !error && subjects.length > 0 && (
+          <motion.div
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+          >
+            {subjects.map((subject) => (
+              <motion.div
+                key={subject._id}
+                className="bg-white rounded-lg shadow-lg overflow-hidden p-6 hover:shadow-xl transition-shadow duration-300 flex flex-col"
+                variants={itemVariants}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <h3 className="text-xl font-bold text-green-700 mb-2">
+                  {subject.name}
+                </h3>
+                <p className="text-gray-700 mb-1">
+                  <span className="font-semibold">Code:</span> {subject.code}
+                </p>
+                <p className="text-gray-700 mb-3">
+                  <span className="font-semibold">Type:</span> {subject.type}
+                </p>
+
+                {/* Edit and Delete Buttons */}
+                <div className="mt-auto flex justify-end space-x-2">
+                  <button
+                    onClick={() => openEditModal(subject)}
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-1 px-4 rounded-lg shadow-md transition duration-200 transform hover:scale-105"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteClick(subject)}
+                    className="bg-red-500 hover:bg-red-600 text-white font-semibold py-1 px-4 rounded-lg shadow-md transition duration-200 transform hover:scale-105"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </div>
+
+      {/* Modal for Add/Edit Subject */}
+      <AnimatePresence>
+        {showModal && (
+          <AddEditSubjectModal
+            isOpen={showModal}
+            onClose={closeModal}
+            initialData={editingSubject}
+            onSubmit={handleAddEditSubmit}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showConfirmDelete && (
+          <motion.div
+            className="fixed inset-0 bg-gray-600 bg-opacity-75 flex justify-center items-center p-4 z-50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowConfirmDelete(false)} // Close on overlay click
+          >
+            <motion.div
+              className="bg-white rounded-lg shadow-xl p-8 w-full max-w-sm relative"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()} // Prevent closing when clicking inside
+            >
+              <h3 className="text-xl font-bold text-center mb-4 text-gray-800">
+                Confirm Deletion
+              </h3>
+              <p className="text-center text-gray-600 mb-6">
+                Are you sure you want to delete subject "{subjectToDelete?.name}
+                "? This action cannot be undone.
+              </p>
+              <div className="flex justify-center space-x-4">
+                <button
+                  onClick={() => setShowConfirmDelete(false)}
+                  className="px-6 py-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition duration-200"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export default SubjectsPage;
